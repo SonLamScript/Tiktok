@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elite TikTok Patcher Engine</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
+    <style>
+        body { background: #09090b; color: #f4f4f5; font-family: system-ui, sans-serif; }
+        .glow-effect { box-shadow: 0 0 25px rgba(147, 51, 234, 0.4); }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-lg p-6 bg-zinc-900/90 border border-purple-500/30 rounded-2xl shadow-2xl glow-effect">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 uppercase">
+                VT-Patcher Pro Max
+            </h1>
+            <p class="text-xs text-zinc-400 mt-1">Bypass Transcoder Ladder • Force 60fps High-Bitrate Ingest</p>
+        </div>
+
+        <div class="mb-5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-purple-400 mb-2">Nạp Video Gốc (MP4)</label>
+            <div id="dropZone" class="relative border-2 border-dashed border-zinc-700 hover:border-purple-500 rounded-xl p-6 text-center cursor-pointer transition-all bg-zinc-950/40">
+                <input type="file" id="videoInput" accept="video/mp4" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <div id="promptText">
+                    <p class="text-sm font-medium text-zinc-300">Kéo thả hoặc Click để chọn file</p>
+                    <p class="text-xs text-zinc-500 mt-2" id="fileDetails">Hỗ trợ tối đa cho video xuất từ CapCut/Mobile</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-5">
+            <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span class="block text-[10px] font-bold text-zinc-500 uppercase">Bypass Mode</span>
+                <span class="text-xs font-mono text-emerald-400">Time-Scale Dilation (2x)</span>
+            </div>
+            <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span class="block text-[10px] font-bold text-zinc-500 uppercase">Target Signature</span>
+                <span class="text-xs font-mono text-purple-400">Lavf59.27.100 (59.999fps)</span>
+            </div>
+        </div>
+
+        <button id="processBtn" disabled class="w-full py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 hover:opacity-90 disabled:from-zinc-800 disabled:to-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed font-black rounded-xl transition-all uppercase tracking-wider text-sm cursor-pointer shadow-lg">
+            Kích Hoạt Patch Hệ Thống
+        </button>
+
+        <div id="outputArea" class="mt-5 hidden space-y-4">
+            <div class="h-px bg-zinc-800"></div>
+            <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+                <div class="flex items-center space-x-2">
+                    <div id="statusIndicator" class="h-2 w-2 rounded-full bg-purple-500 animate-pulse"></div>
+                    <span id="statusTxt" class="text-xs font-mono text-zinc-400">Đang khởi tạo luồng ảo...</span>
+                </div>
+                <div class="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                    <div id="progressBar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+            <a id="downloadLink" class="hidden w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-center rounded-xl transition-all uppercase tracking-wider text-sm shadow-md cursor-pointer block">
+                Tải Video Đã Patch Chuẩn 59.999fps 🚀
+            </a>
+        </div>
+    </div>
+
+    <script>
+        const { createFFmpeg } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+        
+        const videoInput = document.getElementById('videoInput');
+        const fileDetails = document.getElementById('fileDetails');
+        const processBtn = document.getElementById('processBtn');
+        const outputArea = document.getElementById('outputArea');
+        const statusTxt = document.getElementById('statusTxt');
+        const progressBar = document.getElementById('progressBar');
+        const downloadLink = document.getElementById('downloadLink');
+        const statusIndicator = document.getElementById('statusIndicator');
+
+        let rawFile = null;
+        let isCoreLoaded = false;
+
+        videoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                rawFile = file;
+                fileDetails.innerText = `${file.name} | ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+                processBtn.disabled = false;
+            }
+        });
+
+        function cleanBinaryFootprints(u8Array) {
+            const encoder = new TextEncoder();
+            const keys = [encoder.encode("LvMetaInfo"), encoder.encode("aigc_info"), encoder.encode("bytevehwavc")];
+            for (let k of keys) {
+                let pos = 0;
+                while ((pos = findPattern(u8Array, k, pos)) !== -1) {
+                    for (let i = 0; i < k.length; i++) u8Array[pos + i] = 0x00;
+                    pos += k.length;
+                }
+            }
+            return u8Array;
+        }
+
+        function findPattern(arr, pattern, start) {
+            for (let i = start; i <= arr.length - pattern.length; i++) {
+                let match = true;
+                for (let j = 0; j < pattern.length; j++) {
+                    if (arr[i + j] !== pattern[j]) { match = false; break; }
+                }
+                if (match) return i;
+            }
+            return -1;
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!rawFile) return;
+            processBtn.disabled = true;
+            outputArea.classList.remove('hidden');
+            downloadLink.classList.add('hidden');
+            progressBar.style.width = '15%';
+            
+            try {
+                if (!isCoreLoaded) {
+                    statusTxt.innerText = "Đang đồng bộ thư viện WebAssembly Engine...";
+                    await ffmpeg.load();
+                    isCoreLoaded = true;
+                }
+
+                progressBar.style.width = '40%';
+                statusTxt.innerText = "Đang xử lý cấu trúc nhị phân & Làm sạch Metadata...";
+                
+                const buffer = await rawFile.arrayBuffer();
+                let cleanData = cleanBinaryFootprints(new Uint8Array(buffer));
+
+                ffmpeg.FS('writeFile', 'source.mp4', cleanData);
+                progressBar.style.width = '60%';
+                statusTxt.innerText = "Đang tái cấu trúc toán học phân phối Frame (59.999fps)...";
+
+                await ffmpeg.run(
+                    '-itsscale', '2', 
+                    '-i', 'source.mp4', 
+                    '-c:v', 'copy', 
+                    '-c:a', 'copy', 
+                    '-metadata', 'encoder=Lavf59.27.100',
+                    'patched.mp4'
+                );
+
+                progressBar.style.width = '90%';
+                statusTxt.innerText = "Đóng gói Container hoàn tất! Đang kết xuất...";
+
+                const resultData = ffmpeg.FS('readFile', 'patched.mp4');
+                const patchedBlob = new Blob([resultData.buffer], { type: 'video/mp4' });
+                const finalUrl = URL.createObjectURL(patchedBlob);
+
+                progressBar.style.width = '100%';
+                statusTxt.innerText = "Hệ thống đã vá thành công! Sẵn sàng tải xuống.";
+                statusIndicator.classList.remove('bg-purple-500');
+                statusIndicator.classList.add('bg-emerald-400');
+
+                downloadLink.href = finalUrl;
+                downloadLink.download = `bypass_60fps_${Date.now()}_${rawFile.name}`;
+                downloadLink.classList.remove('hidden');
+                processBtn.disabled = false;
+
+            } catch (err) {
+                console.error(err);
+                statusTxt.innerText = "Lỗi runtime! Kiểm tra lại cấu hình phân vùng.";
+                statusIndicator.classList.remove('bg-purple-500');
+                statusIndicator.classList.add('bg-rose-500');
+                processBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
